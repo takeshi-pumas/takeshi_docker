@@ -987,15 +987,13 @@ class Grasp_floor(smach.State):
         if grasp_state == 'failed_grasp': 
             return 'failed'
 
-        else:
-            return 'succ'
-        #################################################################################################################               
-
-        if succ:
-            return 'succ'
         publish_scene()
         arm.set_named_target('go')
         succ=arm.go()
+        
+        if succ:
+            return 'succ'
+        
         
                
         if self.tries==10:
