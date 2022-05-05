@@ -781,7 +781,7 @@ class Initial(smach.State):
         arm.go()
         head.set_named_target('neutral')
         succ = head.go()  
-        move_base(1.15,0.35,0.5*np.pi)         
+        #move_base(1.15,0.35,0.5*np.pi)         ###FORDRAWERS
         if self.tries>=2:
             move_base(1.15,0.35,0.5*np.pi)         
             return 'tries'
@@ -979,18 +979,17 @@ class Grasp_floor(smach.State):
         move_abs(-0.1,0.0,0.0,.2)
 
         publish_scene()
+        succ= primitive_grasp_detector()
         #save_hand(1)
-        img_after = save_hand(1)                            ################################################### New !!!!!! #####################
-        grasp_state = grasp_detector(img_after,img_before)  ##### here image grasp detector
+        #img_after = save_hand(1)                            ################################################### New !!!!!! #####################
+        #grasp_state = grasp_detector(img_after,img_before)  ##### here image grasp detector
         
         broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
-        if grasp_state == 'failed_grasp': 
-            return 'failed'
-
+        
         publish_scene()
         arm.set_named_target('go')
-        succ=arm.go()
-        
+        arm.go()
+
         if succ:
             return 'succ'
         
@@ -1715,8 +1714,8 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
-        smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
-        #smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'PRE_DRAWER',    'tries':'SCAN_FLOOR'}) 
+        #smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) ###FORDRAWERS
+        smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'PRE_DRAWER',    'tries':'SCAN_FLOOR'}) 
         smach.StateMachine.add('PRE_DRAWER',     Pre_drawer(),  transitions = {'failed':'PRE_DRAWER',    'succ': 'GRASP_DRAWER',  'tries':'INITIAL'}) 
         smach.StateMachine.add('GRASP_DRAWER',     Grasp_drawer(),  transitions = {'failed':'GRASP_DRAWER',    'succ': 'POST_DRAWER',  'tries':'INITIAL'}) 
         smach.StateMachine.add('POST_DRAWER',     Post_drawer(),  transitions = {'failed':'POST_DRAWER',    'succ': 'PRE_DRAWER',  'tries':'INITIAL'}) 
