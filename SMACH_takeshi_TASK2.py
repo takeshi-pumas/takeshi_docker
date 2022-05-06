@@ -1819,8 +1819,8 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
-        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'END',      'succ':'PRE_GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
+        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'END',      'succ':'PRE_GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'PRE_GRASP_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'END',    'tries':'INITIAL'}) 
 
