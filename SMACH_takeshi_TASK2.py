@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from std_srvs.srv import Empty, Trigger, TriggerRequest
 import smach
+from std_msgs.msg import String
 from move_base_msgs.msg import MoveBaseAction, MoveBaseGoal
 from geometry_msgs.msg import PoseStamped, Point , Quaternion
 from actionlib_msgs.msg import GoalStatus
@@ -36,7 +37,36 @@ class Proto_state(smach.State):###example of a state definition.
             return'tries'
 
 ####################################################################Functions in notebook ##################################################################
+def messg_class_name_idx(message_read,class_resp):
+    txt=message_read.split('_')
+    txt=''.join(txt)
+    for i,name  in enumerate(class_names):
+        if txt in name:
+            print(name , i)
+            idx=i
+    if len(np.where(class_resp==idx)[0])==0: 
+        print('requeste class not found, porceed to closest tf')
+        return False
+    if len(np.where(class_resp==idx)[0])==1: 
+        print('requeste class is tf index ', np.where(class_resp==idx)[0]/3)
+        return np.where(class_resp==idx)[0]/3
+    if len(np.where(class_resp==idx)[0])>1: 
+        aux=np.where(class_resp==idx)[0]/3
+        print ('hypoteheses in various tfs, highest likelihood tf idx->',aux[np.argmin(np.where(class_resp==idx)[0]%3)])
+        return aux[np.argmin(np.where(class_resp==idx)[0]%3)]
+def readmssg(message):
+    global message_read
+    message_read=message.data
+    return message_read
 
+def primitive_grasp_detector():
+    a = gripper.get_current_joint_values()
+    if np.linalg.norm(a - np.asarray(grasped))  >  (np.linalg.norm(a - np.asarray(ungrasped))):
+        print ('grasp seems to have failed')
+        return False
+    else:
+        print('super primitive grasp detector points towards succesfull ')
+        return True
 def cents_to_sceneobjs(cents):
     trans , rot = listener.lookupTransform('/map', '/head_rgbd_sensor_gazebo_frame', rospy.Time(0))
 
@@ -309,7 +339,7 @@ def plane_seg_square_imgs(lower=500 ,higher=50000,reg_ly= 30,reg_hy=600,reg_lx=0
 
                 cv2.circle(img, (cX, cY), 5, (255, 255, 255), -1)
                 cv2.putText(img, "centroid_"+str(i)+"_"+str(cX)+','+str(cY)    ,    (cX - 25, cY - 25)   ,cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
-                print ('cX,cY',cX,cY)
+                #print ('cX,cY',cX,cY)
                 xyz=[]
 
 
@@ -324,10 +354,9 @@ def plane_seg_square_imgs(lower=500 ,higher=50000,reg_ly= 30,reg_hy=600,reg_lx=0
                 xyz=np.asarray(xyz)
                 cent=xyz.mean(axis=0)
                 cents.append(cent)
-                print (cent)
+                #print (cent)
                 points.append(xyz)
-            else:
-                print ('cent out of region... rejected')
+            
     sub_plt=0
     if plt_images:
         for image in images:
@@ -335,8 +364,8 @@ def plane_seg_square_imgs(lower=500 ,higher=50000,reg_ly= 30,reg_hy=600,reg_lx=0
             sub_plt+=1
             ax = plt.subplot(5, 5, sub_plt )
 
-            plt.imshow(image)
-            plt.axis("off")
+            ##plt.imshow(image)
+            #plt.axis("off")
 
     cents=np.asarray(cents)
     ### returns centroids found and a group of 3d coordinates that conform the centroid
@@ -390,7 +419,7 @@ def seg_square_imgs(lower=2000,higher=50000,reg_ly=0,reg_hy=1000,reg_lx=0,reg_hx
 
                 cv2.circle(img, (cX, cY), 5, (255, 255, 255), -1)
                 cv2.putText(img, "centroid_"+str(i)+"_"+str(cX)+','+str(cY)    ,    (cX - 25, cY - 25)   ,cv2.FONT_HERSHEY_SIMPLEX, 0.9, (0, 0, 0), 2)
-                print ('cX,cY',cX,cY)
+                #print ('cX,cY',cX,cY)
                 xyz=[]
 
 
@@ -405,10 +434,10 @@ def seg_square_imgs(lower=2000,higher=50000,reg_ly=0,reg_hy=1000,reg_lx=0,reg_hx
                 xyz=np.asarray(xyz)
                 cent=xyz.mean(axis=0)
                 cents.append(cent)
-                print (cent)
+                #print (cent)
                 points.append(xyz)
             else:
-                print ('cent out of region... rejected')
+                #print ('cent out of region... rejected')
                 images.pop()
     sub_plt=0
     if plt_images:
@@ -637,6 +666,27 @@ def move_d_to(target_distance=0.5,target_link='Floor_Object0'):
     #succ=move_base( for_grasp[0],for_grasp[1],         np.arctan2(pose[1],pose[0])-euler[2])
     succ=move_base( new_pose[0],new_pose[1],         np.arctan2(pose[1],pose[0])  -euler[2]  -0.07   )
     return succ   
+
+def classify_images(images, target='None'):
+    req=classify_client.request_class()
+    for image in images:
+        img_msg=bridge.cv2_to_imgmsg(image)
+        req.in_.image_msgs.append(img_msg)
+    resp1 = classify_client(req)
+    class_resp= np.asarray(resp1.out.data)
+    cont3=0
+    class_labels=[]
+    for cla in class_resp:
+        
+        if cont3==3:
+            print '-----------------'
+            cont3=0
+        print (class_names [(int)(cla)])
+        class_labels.append(class_names [(int)(cla)])
+
+        cont3+=1  
+    return class_resp  
+
 def shelf_line_up(target_distance=0.5,target_link='Object0_Shelf_low'):
     ###Face towards Targetlink and get target distance close
     try:
@@ -773,34 +823,46 @@ class Scan_shelf(smach.State):
     def execute(self,userdata):
         global closest_centroid_index 
 
-        rospy.loginfo('State : Scan Shelves')
         self.tries+=1
+        rospy.loginfo('State : Scan Shelves')
         publish_scene()
         head_val=head.get_current_joint_values()
         arm.set_named_target('go')
         arm.go()
+
         head_val[1]=np.deg2rad(-30)
-        move_base(2.5-0.1*self.tries,3.7,0.5*np.pi)
+        move_base(2.5-0.01*self.tries,3.7+0.1*self.tries,0.5*np.pi)
         succ=head.go(head_val)
-
+        print ('request message is',message_read)
+        
         cents, xyz, imgs= seg_square_imgs(reg_lx=30, reg_hx=500, lower=100,higher=6000,plt_images=True)
-        closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
-
         if len(cents)==0:return'failed'
-
-        print("closest cent" ,cents[closest_centroid_index])
-
-
-
-
-
-        if succ:
-            return 'succ'
+        
+        closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
+        class_resp=classify_images(imgs)
+        closest_centroid_index= messg_class_name_idx( message_read ,class_resp )
+        print (closest_centroid_index,'#####################################################################')
         if self.tries==5:
+            closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
             self.tries=0 
             return'tries'
+        if closest_centroid_index ==False:
+            return'failed'  
         else:
-            return 'failed'
+
+            print("target cent" ,cents[closest_centroid_index])
+            return 'succ'
+        
+
+
+
+
+
+
+
+
+        
+        
         
         
         
@@ -878,7 +940,7 @@ class Grasp_shelf(smach.State):
         pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
         open_gripper()
         av= arm.get_current_joint_values()
-        if target_tf[-3:]=='low' :av[0]=0.27
+        if target_tf[-3:]=='low' :av[0]=0.3
         if target_tf[-4:]=='high':av[0]=0.6
         arm.go(av)
 
@@ -907,7 +969,8 @@ class Grasp_shelf(smach.State):
         rospy.sleep(0.05)
         
 
-        succ= close_gripper()
+        close_gripper()
+        
         #checkgrasp
         #av= arm.get_current_joint_values()
         #av[0]+=0.1
@@ -916,18 +979,10 @@ class Grasp_shelf(smach.State):
         move_abs(-0.1,0.0,0.0,0.2)
         move_abs(-0.2,0.0,0.0,0.6)
         move_abs(-0.1,0.0,0.0,0.2)
-        #checkgrasp
-        arm.set_named_target('go')
-        arm.go()
-
-       
-
-        
-        
-        
-        
-        
+        succ= primitive_grasp_detector()
         if succ:
+            arm.set_named_target('go')
+            arm.go()
             return 'succ'
         self.tries+=1
         if self.tries==5:
@@ -937,15 +992,7 @@ class Grasp_shelf(smach.State):
             arm.set_named_target('go')
             arm.go()
             return 'failed'
-        self.tries+=1
-        if self.tries==3:
-            self.tries=0 
-            return'tries'
-        if succ:
-            return 'succ'
-        else:
-            return 'failed'
-############################################               
+
 ##################################################Pre_grasp_floor()      
 class Pre_grasp_floor(smach.State):###get a convenient pre grasp pose
     def __init__(self):
@@ -1412,7 +1459,7 @@ class Goto_person(smach.State):
         if self.tries==4:
             self.tries=0 
             return'tries'
-        goal_x = 0.6
+        goal_x = 0.8 
         goal_y = 3.3
         goal_yaw = 2*1.57
         goal_xyz=np.asarray((goal_x,goal_y,goal_yaw))
@@ -1468,7 +1515,7 @@ class Give_object(smach.State):
 
 
         clear_octo_client()
-        wb_give_object=[0.57, 3.26, 3.10, 0.057,-0.822,-0.0386, -0.724, 0.0, 0.0]
+        wb_give_object=[ 3.26,0.57, 3.10, 0.057,-0.822,-0.0386, -0.724, 0.0, 0.0]
         whole_body.set_joint_value_target(wb_give_object)
         whole_body.go()
 
@@ -1783,6 +1830,7 @@ def init(node_name):
     whole_body=moveit_commander.MoveGroupCommander('whole_body_light')
     arm =  moveit_commander.MoveGroupCommander('arm')
     listener = tf.TransformListener()
+    sub_message=rospy.Subscriber("/message",String,readmssg)
     broadcaster = tf.TransformBroadcaster()
     tfBuffer = tf2_ros.Buffer()
     tf_static_broadcaster = tf2_ros.StaticTransformBroadcaster()
@@ -1795,7 +1843,7 @@ def init(node_name):
 
     clear_octo_client = rospy.ServiceProxy('/clear_octomap', Empty)
     bridge = CvBridge()
-    class_names=['002masterchefcan', '003crackerbox', '004sugarbox', '005tomatosoupcan', '006mustardbottle', '007tunafishcan', '008puddingbox', '009gelatinbox', '010pottedmeatcan', '011banana', '012strawberry', '013apple', '014lemon', '015peach', '016pear', '017orange', '018plum', '019pitcherbase', '021bleachcleanser', '022windexbottle', '024bowl', '025mug', '027skillet', '028skilletlid', '029plate', '030fork', '031spoon', '032knife', '033spatula', '035powerdrill', '036woodblock', '037scissors', '038padlock', '040largemarker', '042adjustablewrench', '043phillipsscrewdriver', '044flatscrewdriver', '048hammer', '050mediumclamp', '051largeclamp', '052extralargeclamp', '053minisoccerball', '054softball', '055baseball', '056tennisball', '057racquetball', '058golfball', '059chain', '061foambrick', '062dice', '063-amarbles', '063-bmarbles', '065-acups', '065-bcups', '065-ccups', '065-dcups', '065-ecups', '065-fcups', '065-gcups', '065-hcups', '065-icups', '065-jcups', '070-acoloredwoodblocks', '070-bcoloredwoodblocks', '071nineholepegtest', '072-atoyairplane', '073-alegoduplo', '073-blegoduplo', '073-clegoduplo', '073-dlegoduplo', '073-elegoduplo', '073-flegoduplo', '073-glegoduplo']
+    class_names=['002masterchefcan', '003crackerbox', '004sugarbox', '005tomatosoupcan', '006mustardbottle', '007tunafishcan', '008puddingbox', '009gelatinbox', '010pottedmeatcan', '011banana', '012strawberry', '013apple', '014lemon', '015peach', '016pear', '017orange', '018plum', '019pitcherbase', '021bleachcleanser', '022windexbottle', '024bowl', '025mug', '026sponge', '027skillet', '028skilletlid', '029plate', '030fork', '031spoon', '032knife', '033spatula', '035powerdrill', '036woodblock', '037scissors', '038padlock', '040largemarker', '042adjustablewrench', '043phillipsscrewdriver', '044flatscrewdriver', '048hammer', '050mediumclamp', '051largeclamp', '052extralargeclamp', '053minisoccerball', '054softball', '055baseball', '056tennisball', '057racquetball', '058golfball', '058golfball (1)', '059chain', '061foambrick', '062dice', '063-amarbles', '063-bmarbles', '065-acups', '065-bcups', '065-ccups', '065-dcups', '065-ecups', '065-fcups', '065-gcups', '065-hcups', '065-icups', '065-jcups', '070-acoloredwoodblocks', '070-bcoloredwoodblocks', '071nineholepegtest', '072-atoyairplane', '072-btoyairplane', '072-ctoyairplane', '072-dtoyairplane', '072-etoyairplane', '073-alegoduplo', '073-blegoduplo', '073-clegoduplo', '073-dlegoduplo', '073-elegoduplo', '073-flegoduplo', '073-glegoduplo', '077rubikscube']
     classify_client = rospy.ServiceProxy('/classify', Classify)
     base_vel_pub = rospy.Publisher('/hsrb/command_velocity', Twist, queue_size=10)
 
@@ -1819,10 +1867,12 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
+        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
         smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
-        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'END',      'succ':'PRE_GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'PRE_GRASP_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
-        smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'END',    'tries':'INITIAL'}) 
+        smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GOTO_PERSON',    'tries':'INITIAL'}) 
+        smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
+        smach.StateMachine.add("GIVE_OBJECT",    Give_object(),   transitions = {'failed':'GIVE_OBJECT',   'succ':'END',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
 
 
 
@@ -1845,8 +1895,7 @@ if __name__== '__main__':
         smach.StateMachine.add("SCAN_TABLE",    Scan_table(),   transitions = {'failed':'SCAN_TABLE',   'succ':'PRE_GRASP_TABLE',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
         smach.StateMachine.add("PRE_GRASP_TABLE",   Pre_grasp_table() ,      transitions = {'failed':'PRE_GRASP_TABLE',      'succ':'GRASP_TABLE',    'tries':'INITIAL'}) 
         smach.StateMachine.add("GRASP_TABLE",   Grasp_table() ,      transitions = {'failed':'GRASP_TABLE',      'succ':'INITIAL',    'tries':'INITIAL'}) 
-        smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
-        smach.StateMachine.add("GIVE_OBJECT",    Give_object(),   transitions = {'failed':'GIVE_OBJECT',   'succ':'END',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
+        
         
 
         
