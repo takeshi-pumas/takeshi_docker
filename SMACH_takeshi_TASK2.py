@@ -824,34 +824,46 @@ class Scan_shelf(smach.State):
         global closest_centroid_index 
 
         self.tries+=1
-        rospy.loginfo('State : Scan Shelves')
+        rospy.loginfo('State : Scan Shelves ')
         publish_scene()
-        head_val=head.get_current_joint_values()
+        
         arm.set_named_target('go')
         arm.go()
-
-        head_val[1]=np.deg2rad(-30)
-        move_base(2.5-0.01*self.tries,3.7+0.1*self.tries,0.5*np.pi)
-        succ=head.go(head_val)
-        print ('request message is',message_read)
+        
+        
+        move_base(2.5-0.1*self.tries,3.7+0.05*self.tries,np.pi)
+        av=arm.get_current_joint_values()
+        av[0]=0.1*self.tries
+        av[1]=-0.12
+        arm.go(av)
+        gaze_point(2.5,4.7,0.3)
+        print ('request message is',message_read, 'try num ',self.tries)
         
         cents, xyz, imgs= seg_square_imgs(reg_lx=30, reg_hx=500, lower=100,higher=6000,plt_images=True)
         if len(cents)==0:return'failed'
         
-        closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
+        #closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
         class_resp=classify_images(imgs)
-        closest_centroid_index= messg_class_name_idx( message_read ,class_resp )
-        print (closest_centroid_index,'#####################################################################')
-        if self.tries==5:
-            closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
-            self.tries=0 
-            return'tries'
-        if closest_centroid_index ==False:
-            return'failed'  
+        requested_centroid_index= messg_class_name_idx( message_read ,class_resp )
+        print (requested_centroid_index,'#####################################################################')
+        if requested_centroid_index ==False:
+            if self.tries==5:
+                closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
+                print("target closest  cent" ,cents[closest_centroid_index,:])
+                static_tf_publish(cents[closest_centroid_index])
+                
+                self.tries=0 
+                return'tries'
+            else:
+                return'failed' 
+        
         else:
-
-            print("target cent" ,cents[closest_centroid_index])
+            
+            print("target cent" ,cents[requested_centroid_index])
+            static_tf_publish(cents[requested_centroid_index])
             return 'succ'
+        
+        
         
 
 
@@ -878,13 +890,14 @@ class Pre_grasp_shelf(smach.State):###get a convenient pre grasp pose
         pose, quat =  listener.lookupTransform('map','base_link',rospy.Time(0))
         print ('base', pose, tf.transformations.euler_from_quaternion(quat)[2])
         publish_scene()
-        target_tf= 'Object_'+str(closest_centroid_index)+'_Shelf_low'
+        target_tf= 'Object_0_Shelf_low' ####ONly target tf  
+        
         head.set_named_target('neutral')
         head.go()
         try:
             listener.lookupTransform('map',target_tf,rospy.Time(0))
         except:
-            target_tf= 'Object_'+str(closest_centroid_index)+'_Shelf_high'
+            target_tf= 'Object_0_Shelf_high'
         try:
             listener.lookupTransform('map',target_tf,rospy.Time(0))
         except:
@@ -909,6 +922,7 @@ class Pre_grasp_shelf(smach.State):###get a convenient pre grasp pose
         arm.set_joint_value_target(arm_grasp_table)
         
         succ=arm.go()
+
         #pose,quat=listener.lookupTransform('map','base_link',rospy.Time(0))
         
         
@@ -940,28 +954,28 @@ class Grasp_shelf(smach.State):
         pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
         open_gripper()
         av= arm.get_current_joint_values()
-        if target_tf[-3:]=='low' :av[0]=0.3
-        if target_tf[-4:]=='high':av[0]=0.6
+        if target_tf[-3:]=='low' :av[0]=0.28
+        if target_tf[-4:]=='high':av[0]=0.57
         arm.go(av)
 
         
             
 
         
-        while pose[2] >= 0.06:
+        while pose[2] >= 0.1:
             
             if pose[1] > 0.02:
                 print ('drift correct   -')
-                move_abs(0.00,0.0,-10, 0.07)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
-            if pose[1] < -0.02:
+                move_abs(0.0,-0.01,-5, 0.1)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+            elif pose[1] < -0.02:
                 print ('drift correct   +')
-                move_abs(0.00, 0.0,10, 0.05) #GRADOS! WTF , 
+                move_abs(0.00, 0.01,5, 0.1) #GRADOS! WTF , 
             
             
             
             else:
                 print ('getting close')
-                move_abs(0.1,0,0,0.05)
+                move_abs(0.051,0,0,0.1)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
             #rospy.sleep(0.1)    
             
@@ -980,6 +994,7 @@ class Grasp_shelf(smach.State):
         move_abs(-0.2,0.0,0.0,0.6)
         move_abs(-0.1,0.0,0.0,0.2)
         succ= primitive_grasp_detector()
+        broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
         if succ:
             arm.set_named_target('go')
             arm.go()
@@ -1867,9 +1882,9 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
-        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
         smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
-        smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'PRE_GRASP_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
+        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
+        smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GOTO_PERSON',    'tries':'INITIAL'}) 
         smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
         smach.StateMachine.add("GIVE_OBJECT",    Give_object(),   transitions = {'failed':'GIVE_OBJECT',   'succ':'END',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
