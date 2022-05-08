@@ -849,8 +849,9 @@ class Scan_shelf(smach.State):
         if requested_centroid_index ==False:
             if self.tries==5:
                 closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
-                print("target closest  cent" ,cents[closest_centroid_index,:])
-                static_tf_publish(cents[closest_centroid_index])
+
+                print("target closest  cent index" ,cents[closest_centroid_index,:])
+                static_tf_publish(cents[closest_centroid_index:,:])
                 
                 self.tries=0 
                 return'tries'
