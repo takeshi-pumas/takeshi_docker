@@ -72,16 +72,12 @@ wb_trayB = [[0.002, 1.94, -1.60, 0.35, -1.68, -0.035, -0.016,  0.0, 0.0],   # [0
 # ///////////////////////////////////////////////////////////////////////////////////////////
 
 ##### ARM #####
-arm_grasp_from_above = [0.19263830140116414,
- -2.2668981568652917,
- -0.007358947463759424,
- -0.9939144210462025,
- -0.17365421548386273,
- 0.0]
-arm_grasp_from_above_table = [0.41349380130577407,
- -1.671584191489468,
+arm_grasp_from_above=[0.19, -2.01, 0.0, -0.99, -0.17, 0.0]
+
+arm_grasp_from_above_table=[0.4349380130577407,
+ -1.571584191489468,
  -0.02774372779356371,
- -1.5952436225825641,
+ -1.2052436225825641,
  0.22362492457833927,
  0.0]
 arm_grasp_table=[0.41349380130577407,
@@ -292,3 +288,53 @@ grasp_dict={
 # ///////////////////////////////////////////////////////////////////////////////////////////
 # ///////////////////////////////////////////////////////////////////////////////////////////
 # //////////////////////////////////////////////////////////////////////////////////////////
+
+def grasp_angle(ref,img):
+    angle = 0
+    cv2.putText(img,str(img.shape),(100,100),cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+    gray_image = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    gray_ref = cv2.cvtColor(ref, cv2.COLOR_BGR2GRAY)
+    ret,thresh = cv2.threshold(gray_image,100,255,0)
+    im2, _,_ = cv2.findContours(thresh,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    ret_ref,thresh_ref = cv2.threshold(gray_ref,100,255,0)
+    im2_ref, _, _ = cv2.findContours(thresh_ref,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    img_xor    = cv2.bitwise_xor(im2, im2_ref)
+    kernel = np.ones((5, 5), np.uint8)
+    image = cv2.erode(img_xor, kernel)
+    image = cv2.dilate(image, kernel)
+    im_floodfill = image.copy()
+    h, w = image.shape[:2]
+    mask = np.zeros((h+2, w+2), np.uint8)
+    cv2.floodFill(im_floodfill, mask, (0,0), 255);
+    im_floodfill_inv = cv2.bitwise_not(im_floodfill)
+
+    image = image | im_floodfill_inv
+    img_fin, contours, hierarchy = cv2.findContours(image,cv2.RETR_TREE,cv2.CHAIN_APPROX_SIMPLE)
+    for c in contours:
+        M = cv2.moments(c)
+        if M["m00"] != 0:
+            cX = int(M["m10"] / M["m00"])
+            cY = int(M["m01"] / M["m00"])
+        else:
+            cX, cY = 0, 0
+
+    for i, contour in enumerate(contours):
+            area = cv2.contourArea(contour)
+
+            if area > 1000 and area < 50000 :
+                boundRect = cv2.boundingRect(contour)
+                rect = cv2.minAreaRect(contour)
+                angle = rect[2]
+                box = cv2.boxPoints(rect)
+                box = np.int0(box)
+                cv2.drawContours(img_fin,[box],0,(0,0,255),2)
+                img=cv2.rectangle(img_fin,(boundRect[0], boundRect[1]),(boundRect[0]+boundRect[2], boundRect[1]+boundRect[3]), (255,0,0), 2)
+                M = cv2.moments(contour)
+                # calculate x,y coordinate of center
+                cX = int(M["m10"] / M["m00"])
+                cY = int(M["m01"] / M["m00"])
+                if cX < 300:
+                    cv2.circle(img_fin, (cX, cY), 5, (255, 255, 255), -1)
+                    cv2.putText(img_fin, "centroid_"+str(i)+','+str(angle) ,    (cX - 25, cY - 25)   ,cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+                angle = math.radians(angle)
+    return(angle)

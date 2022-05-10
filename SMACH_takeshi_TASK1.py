@@ -993,54 +993,182 @@ class Grasp_floor(smach.State):
         
         else:
             return 'failed'
-class Pre_grasp_floor_above(smach.State):###get a convenient pre grasp pose
+
+
+########################### Grasping by angle FLOOR ###########################
+class Pre_grasp_floor_above(smach.State):
     def __init__(self):
         smach.State.__init__(self,outcomes=['succ','failed','tries'])
         self.tries=0
     def execute(self,userdata):
-        self.tries+=1
         rospy.loginfo('State : PRE_GRASP_FLOOR_ABOVE')
-        
-        poses=[]
-        move_d_to(0.4,target_tf)
-        poses.append(listener.lookupTransform('map','base_link',rospy.Time(0)))
-        poses.append(listener.lookupTransform('map','hand_palm_link',rospy.Time(0)))
-        poses.append(listener.lookupTransform('map',target_tf,rospy.Time(0)))
-        static_tf_publish(np.asarray(poses))
-        #move_abs(0.1,0.0,0.0,1.2)
-        
+        publish_scene()
+
+        target_tf= 'Closest_Floor'
+
+        head.set_named_target('neutral')
+        head.go()
+        self.tries+=1
+        if self.tries==11:return 'tries'
+        move_d_to(0.66,target_tf)   ############### PLAY WITH THIS NUMBER
+        print ('move D')
+        arm.set_named_target('neutral')
+        open_gripper()
+        arm.go()
+        if self.tries <=5:move_abs(0,0,-10,0.051)
+        arm_grasp_from_above=[0.19, -2.01, 0.0, -0.99, -0.17, 0.0]
+        arm.set_joint_value_target(arm_grasp_from_above)
+        succ=arm.go()
+
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+        print ('########################pose, quat after MOVE D' ,pose, euler_from_quaternion(quat))
+
+        rospy.sleep(0.1) 
+        if succ:
+            return 'succ'
+        self.tries+=1
+        if self.tries==3:
+            self.tries=0 
+            return'tries'
+        else:
+            return 'failed'
+
+
+class Grasp_floor_from_above(smach.State):
+    def __init__(self):
+        smach.State.__init__(self,outcomes=['succ','failed','tries'])
+        self.tries=0
+    def execute(self,userdata):
+        global target_tf_class 
+        self.tries+=1
+        rospy.loginfo('State : GRASP_FLOOR_FROM_ABOVE')
+
+        publish_scene()
+        target_tf= 'Closest_Floor'
+        print(target_tf,'<->',target_tf_class)
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+        rospy.sleep(1)
+        arm_grasp_from_above=[0.19, -2.01, 0.0, -0.99, -0.17, 0.0]
+
+
+        cat = find_category(grasp_dict,target_tf_class[0])
+        print( 'class',target_tf_class, 'dest', cat)
+
+        print('Pose_from_above\n')
+        arm.set_joint_value_target(arm_grasp_from_above)
+        arm.go(arm_grasp_from_above)
+        rospy.sleep(0.1)
+
         open_gripper()
         rospy.sleep(0.1)
-        arm_grasp_from_above = [0.19263830140116414, -2.2668981568652917, -0.007358947463759424, -0.9939144210462025, -0.17365421548386273, 0.0]
-        succ = arm.go(arm_grasp_from_above)
-        clear_octo_client()
 
-        av=arm.get_current_joint_values()
-        av[0]=0.11
-        arm.go(av)
-        
-        
-        try:
+        ref = save_hand(0)
+        ref = cv2.cvtColor(ref, cv2.COLOR_BGR2RGB)
+        ref = ref[50:400, 0:390]
+        print 'Reference shot'
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+        print(pose)
+
+
+        while abs(pose[1]) >= 0.05:
+
+            print ('pose',pose)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+            if pose [1] >- 0.2 and pose[1]<0.02:
+                print ('getting close Y')
+                move_abs(0.031,0.02,0,0.1)
+            if pose[1] >= 0.02:
+                print ('drift correct   -')
+                move_abs(0.0,0.0,-10, 0.10)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+            if pose[1] <= -0.02:
+                print ('drift correct   +')
+                move_abs(0.0, 0.0,10, 0.10) #GRADOS! WTF , 
+        rospy.sleep(0.1)
 
-            print ('ppose, quat after MOVE D' ,pose, euler_from_quaternion(quat))
-            move_abs(0.1,-0.2,0,0.5)
+        print('Lined up over Y\n')
+        rospy.sleep(0.1)
 
-            pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
-            print ('ppose, quat after correct' ,pose, euler_from_quaternion(quat))
-        except(tf.LookupException):
-            print ('no tf')
-            self.tries+=1
-            return 'failed'
- 
+        publish_scene()
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+
+        print 'Correcting X'
+        wb = whole_body.get_current_joint_values()
+        wb[0] = wb[0] + pose[0]
+        whole_body.go(wb)
+        rospy.sleep(0.1)
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+
+        print('Lined up over X\n'), pose
+
+        wb = whole_body.get_current_joint_values()
+        wb[1] = wb[1] + pose[1] + 0.05
+        whole_body.go(wb)
+        rospy.sleep(0.1)
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+
+        print('Realined over Y\n'), pose
+
+        img = save_hand(0)
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        img = img[50:400, 0:390]
+        print 'Angle shot'
+        ang = grasp_angle(ref,img)
         
-        rospy.sleep(0.5)    
+        print('Aligning Angle 1')
+        print ang
+
+        wb = whole_body.get_current_joint_values()
+        wb[7] = ang + 1.57
+        whole_body.go(wb)
+        rospy.sleep(0.1)
+
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+
+        if pose[0] >= 0.05:
+            print 'Correcting X'
+            wb = whole_body.get_current_joint_values()
+            wb[0] = wb[0] + pose[0]
+            whole_body.go(wb)
+            rospy.sleep(0.1)
+
+        pose, _ =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+
+        wb=whole_body.get_current_joint_values()
+        wb[3] = wb[3] - 0.154
+        whole_body.go(wb)
+        rospy.sleep(0.1)
+
+        img2 = save_hand(0)
+        img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
+        img2 = img2[50:400, 0:390]
+
+        ang = grasp_angle(ref,img2)
+
+        
+        print('Aligning Angle 2')
+        print ang
+
+        wb=whole_body.get_current_joint_values()
+        wb[7] = wb[7] + 0.52
+        whole_body.go(wb)
+        rospy.sleep(0.1)
+
         close_gripper()
-        rospy.sleep(0.5)    
-        av=arm.get_current_joint_values()
-        av[0]=0.21
-        arm.go(av)
-        move_abs(-0.1,0.,0.0,1.5)
+        rospy.sleep(1)
+
+        arm.set_named_target('go')
+        arm.go()
+        head.set_named_target('neutral')
+        head.go()
+        close_gripper()
+        rospy.sleep(0.1)
+
 
         a = gripper.get_current_joint_values()
         if np.linalg.norm(a - np.asarray(grasped))  >  (np.linalg.norm(a - np.asarray(ungrasped))):
@@ -1049,9 +1177,6 @@ class Pre_grasp_floor_above(smach.State):###get a convenient pre grasp pose
         else:
             print('super primitive grasp detector points towards succesfull ')
             return'succ'
-
-        
-        
         
         if succ:
             return 'succ'
@@ -1711,10 +1836,14 @@ if __name__== '__main__':
         smach.StateMachine.add('PRE_DRAWER',     Pre_drawer(),  transitions = {'failed':'PRE_DRAWER',    'succ': 'GRASP_DRAWER',  'tries':'INITIAL'}) 
         smach.StateMachine.add('GRASP_DRAWER',     Grasp_drawer(),  transitions = {'failed':'GRASP_DRAWER',    'succ': 'POST_DRAWER',  'tries':'INITIAL'}) 
         smach.StateMachine.add('POST_DRAWER',     Post_drawer(),  transitions = {'failed':'POST_DRAWER',    'succ': 'PRE_DRAWER',  'tries':'INITIAL'}) 
-        smach.StateMachine.add("SCAN_FLOOR",    Scan_floor(),      transitions = {'failed':'INITIAL',      'succ':'PRE_GRASP_FLOOR','above':'PRE_GRASP_FLOOR'  ,  'tries':'INITIAL' , 'clear':'GOTO_TABLE'}, remapping= {'clear_table1_flag':'clear1','clear_table2_flag':'clear2'}) 
+        smach.StateMachine.add("SCAN_FLOOR",    Scan_floor(),      transitions = {'failed':'INITIAL',      'succ':'PRE_GRASP_FLOOR','above':'PRE_GRASP_FLOOR_ABOVE'  ,  'tries':'INITIAL' , 'clear':'GOTO_TABLE'}, remapping= {'clear_table1_flag':'clear1','clear_table2_flag':'clear2'}) 
         
         smach.StateMachine.add("PRE_GRASP_FLOOR",   Pre_grasp_floor() ,      transitions = {'failed':'INITIAL',      'succ':'GRASP_FLOOR',    'tries':'INITIAL'}) 
         smach.StateMachine.add("GRASP_FLOOR",   Grasp_floor() ,      transitions = {'failed':'INITIAL',      'succ':'PRE_DELIVER',    'tries':'INITIAL'}) 
+
+        smach.StateMachine.add("PRE_GRASP_FLOOR_ABOVE",   Pre_grasp_floor_above() ,      transitions = {'failed':'INITIAL',      'succ':'GRASP_FLOOR_ABOVE',    'tries':'INITIAL'}) 
+        smach.StateMachine.add("GRASP_FLOOR_ABOVE",   Grasp_floor_from_above() ,      transitions = {'failed':'INITIAL',      'succ':'PRE_DELIVER',    'tries':'INITIAL'}) 
+
         
         smach.StateMachine.add("GOTO_TABLE",    Goto_table(),   transitions = {'failed':'GOTO_TABLE',   'succ':'SCAN_TABLE',     'tries':'GOTO_TABLE', 'end':'INITIAL'},remapping={'clear_table1_flag':'clear1','clear_table2_flag':'clear2','table_target':'sm_counter'})
         smach.StateMachine.add("SCAN_TABLE",    Scan_table(),   transitions = {'failed':'SCAN_TABLE',   'succ':'PRE_GRASP_TABLE',     'tries':'INITIAL'},remapping={'table_target':'sm_counter'})
@@ -1729,7 +1858,7 @@ if __name__== '__main__':
 
 
        ##########################################NOT IN USE ATM#######################################################
-        smach.StateMachine.add("PRE_GRASP_FLOOR_ABOVE",   Pre_grasp_floor_above() ,      transitions = {'failed':'INITIAL',      'succ':'PRE_DELIVER',    'tries':'END'}) 
+        #smach.StateMachine.add("PRE_GRASP_FLOOR_ABOVE",   Pre_grasp_floor_above() ,      transitions = {'failed':'INITIAL',      'succ':'PRE_DELIVER',    'tries':'END'}) 
         smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
         smach.StateMachine.add("GIVE_OBJECT",    Give_object(),   transitions = {'failed':'GIVE_OBJECT',   'succ':'END',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
         
