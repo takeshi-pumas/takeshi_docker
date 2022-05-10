@@ -148,7 +148,7 @@ def publish_scene():
     add_object("shelf", [1.5, 0.04, 0.4],  [2.5, 4.85, 0.78],  [0.5,0,0,0.5])
     add_object("shelf1", [1.5, 0.04, 0.4], [2.5, 4.85, 0.49], [0.5,0,0, 0.5])
     add_object("shelf2", [1.5, 0.04, 0.4], [2.5, 4.85, 0.18], [0.5,0,0, 0.5])
-    add_object("shelf_wall", [1, 1, 0.04], [2.5, 4.9, 0.5], [0.5,0,0, 0.5])
+    #add_object("shelf_wall", [1, 1, 0.04], [2.5, 4.9, 0.5], [0.5,0,0, 0.5])
     add_object("shelf_wall1", [.04, 1, 0.4], [2.65, 4.9, 0.5],[0.5,0,0, 0.5])
     add_object("shelf_wall2", [.04, 1, 0.4], [1.85, 4.9, 0.5], [0.5,0,0 ,0.5])    
     add_object("table_big", [1.5, 0.3, 0.5], [0.95, 1.9, 0.34],  [0.5,0,0, 0.5])
@@ -970,16 +970,16 @@ class Grasp_shelf(smach.State):
             
             if pose[1] > 0.02:
                 print ('drift correct   -')
-                move_abs(0.0,-0.051,-5, 0.051)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+                move_abs(0.0,-0.031,-5, 0.051)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
             elif pose[1] < -0.02:
                 print ('drift correct   +')
-                move_abs(0.00, 0.051,5, 0.051) #GRADOS! WTF , 
+                move_abs(0.00, 0.031,5, 0.051) #GRADOS! WTF , 
             
             
             
             else:
                 print ('getting close')
-                move_abs(0.066,0,0,0.051)
+                move_abs(0.04,0,0,0.051)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
             #rospy.sleep(0.1)    
             
@@ -1886,8 +1886,8 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
-        smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
         smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
+        smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
         smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GOTO_PERSON',    'tries':'INITIAL'}) 
         smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})

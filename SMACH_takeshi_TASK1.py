@@ -109,81 +109,71 @@ def loop_hand():
     old_img = img_msg
     return img_msg
 
-def save_hand(i=0):
-    img_msg = loop_hand()
+"""def save_hand(i=0):
+        img_msg = loop_hand()
+        cv2_img = bridge.imgmsg_to_cv2(img_msg, "bgr8")
+        img = np.asarray (cv2_img)
+        #np.save('hand_camera_rgb_'+str(i)+'.npy',cv2_img)  
+        #cv2.imwrite('hand_camera_rgb_'+str(i)+'.jpg', cv2_img) 
+        print ('saving hand cam img',i) 
+        return img  
+    """    
+def save_hand(k=0):
+    
+    img_msg = rospy.wait_for_message('/hsrb/hand_camera/image_raw', ImageMsg, timeout=None)
     cv2_img = bridge.imgmsg_to_cv2(img_msg, "bgr8")
     img = np.asarray (cv2_img)
     #np.save('hand_camera_rgb_'+str(i)+'.npy',cv2_img)  
-    #cv2.imwrite('hand_camera_rgb_'+str(i)+'.jpg', cv2_img) 
-    print ('saving hand cam img',i) 
+    cv2.imwrite('hand_camera_rgb_'+str(k)+'.jpg', cv2_img) 
+    
     return img  
+
+
+def grasp_detector(img):
+
+    Hmax, Smax, Vmax = 19, 153, 208
+    Hmin, Smin, Vmin = 15, 121, 166
+    cropped_image = img[75:110, 0:75,:]
+    hsv_test = cv2.cvtColor(cropped_image, cv2.COLOR_BGR2HSV)
     
 
-def grasp_detector(img_after,img_before):
-   
-    #cropped_image_aft = img_after[150:350, 200:350]
-    #cropped_image_bef = img_before[150:350, 200:350]
-    cropped_image_aft = img_after[160:340, 210:340]
-    cropped_image_bef = img_before[160:340, 210:340]
-    cv2.imwrite('hand_camera_rgb_aft'+'.jpg', cropped_image_aft)
-    cv2.imwrite('hand_camera_rgb_before'+'.jpg', cropped_image_bef)
-
-    # ORB
-    
-    gray = cv2.cvtColor(cropped_image_bef,cv2.COLOR_BGR2GRAY)
-    orb = cv2.ORB_create()
-    kp = orb.detect(cropped_image_bef,None)
-    kp, des = orb.compute(cropped_image_bef, kp)
-    img2 = cv2.drawKeypoints(cropped_image_bef, kp, None, color=(0,255,0), flags=0)
-    cv2.imwrite('ORB_TEST.jpg',img2)
-
-    img_ref= cropped_image_aft
-    kp_r, des_r = orb.compute(img_ref, kp)
-    matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
-    matches=matcher.match(des,des_r)
-    #print('num tot matches',len(matches))
-    Tot_matches = len(matches)
-    if Tot_matches == 0:
-        Tot_matches = 0.001    
-
-    matches.sort(key=lambda x: x.distance, reverse=False)
-    numGoodMatches = int(len(matches) * .50)
-    matches = matches[:numGoodMatches]
-    
-    
-
-    
-    # Histogram
-
-    hist_aft = cv2.calcHist([cropped_image_aft], [0], None, [256], [0, 256])
-    hist_bef = cv2.calcHist([cropped_image_bef], [0], None, [256], [0, 256])
-    cv2.imwrite('hist_aft.jpg', hist_aft)
-    cv2.imwrite('hist_bef.jpg', hist_bef)
-
-    hist_1 = np.squeeze(hist_aft)
-    hist_2 = np.squeeze(hist_bef)
-    R11 = np.correlate(hist_1,hist_1,mode='valid')
-    R12 = np.correlate(hist_1,hist_2,mode='valid')
-    print('Normalized correlation', R12/R11)
-    
- 
+    arrH = hsv_test[:,:,0].reshape(2625)
+    arrS = hsv_test[:,:,1].reshape(2625)
+    arrV = hsv_test[:,:,2].reshape(2625)
   
+    listH = arrH.tolist()
+    listS = arrS.tolist()
+    listV = arrV.tolist()
+   
+
+
+    resH = sum(1 for i in listH if i > Hmin and i < Hmax)
+    resS = sum(1 for i in listS if (i > Smin and i < Smax))
+    resV = sum(1 for i in listV if (i > Vmin and i < Vmax))
+
+    # calculo porcentajes
+
+    porcH = resH*100/len(listH)
+    porcS = resS*100/len(listS)
+    porcV = resV*100/len(listV)
+
+    print(porcH,porcS,porcV)
+ 
+   
+
 
     a = gripper.get_current_joint_values()
     if np.linalg.norm(a - np.asarray(grasped))  >  (np.linalg.norm(a - np.asarray(ungrasped))):
         print ('grasp seems to have failed')
-        return 'failed_grasp'
+        if porcH > 90 or porcS > 90 or porcV > 90:
+            print ('and we are looking the floor')
+            return False
+        else:
+            print("there is something")
+            return True
     else:
         print('super primitive grasp detector points towards succesfull ')
-        print('percentage', len(matches)*100/Tot_matches)
-        if len(matches)*100/Tot_matches > 40 or abs(1-R12/R11) < 0.15:       # if correct matches are bigger than X percent or the difference of normalized Corr is less than YY the images are considered equal             
-           print ('images equal, Takeshi is holding the object') 
-           return 'succ_grasp'
-        else: 
-            print('Takeshi lost the object')
-            return 'failed_grasp'  
-
-########################################################
+        return True
 
 
 def primitive_grasp_detector():
@@ -979,10 +969,12 @@ class Grasp_floor(smach.State):
         move_abs(-0.1,0.0,0.0,.2)
 
         publish_scene()
-        succ= primitive_grasp_detector()
+        #succ= primitive_grasp_detector()
         #save_hand(1)
         #img_after = save_hand(1)                            ################################################### New !!!!!! #####################
         #grasp_state = grasp_detector(img_after,img_before)  ##### here image grasp detector
+        img = save_hand(self.tries)
+        succ= grasp_detector(img)   ##### here check grasp now
         
         broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
         
