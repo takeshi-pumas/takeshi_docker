@@ -16,6 +16,9 @@ from cv_bridge import CvBridge, CvBridgeError
 from utils_notebooks import *
 from utils_takeshi import *
 ########## Functions for takeshi states ##########
+
+
+
 class Proto_state(smach.State):###example of a state definition.
     def __init__(self):
         smach.State.__init__(self,outcomes=['succ','failed','tries'])
@@ -146,8 +149,8 @@ def publish_scene():
     add_object("shelf1", [1.5, 0.04, 0.4], [2.5, 4.85, 0.49], [0.5,0,0, 0.5])
     add_object("shelf2", [1.5, 0.04, 0.4], [2.5, 4.85, 0.18], [0.5,0,0, 0.5])
     add_object("shelf_wall", [1, 1, 0.04], [2.5, 4.9, 0.5], [0.5,0,0, 0.5])
-    add_object("shelf_wall1", [.04, 1, 0.4], [2.7, 4.9, 0.5],[0.5,0,0, 0.5])
-    add_object("shelf_wall2", [.04, 1, 0.4], [1.8, 4.9, 0.5], [0.5,0,0 ,0.5])    
+    add_object("shelf_wall1", [.04, 1, 0.4], [2.65, 4.9, 0.5],[0.5,0,0, 0.5])
+    add_object("shelf_wall2", [.04, 1, 0.4], [1.85, 4.9, 0.5], [0.5,0,0 ,0.5])    
     add_object("table_big", [1.5, 0.3, 0.5], [0.95, 1.9, 0.34],  [0.5,0,0, 0.5])
     add_object("table_big_legs1",[.01,.6,.2], [1.55,1.8,0.1],       [0.5,0,0, 0.5])
     add_object("table_big_legs2",[.01,.6,.2], [0.45,1.8,0.1],       [0.5,0,0 ,0.5])
@@ -907,7 +910,7 @@ class Pre_grasp_shelf(smach.State):###get a convenient pre grasp pose
 
 
 
-        shelf_line_up(1,target_tf)   ############### PLAY WITH THIS NUMBER
+        shelf_line_up(0.81,target_tf)   ############### PLAY WITH THIS NUMBER
         print ('shelf_line_up')
         succ=arm.set_named_target('neutral')
         open_gripper()
@@ -963,20 +966,20 @@ class Grasp_shelf(smach.State):
             
 
         
-        while pose[2] >= 0.1:
+        while pose[2] >= 0.091:
             
             if pose[1] > 0.02:
                 print ('drift correct   -')
-                move_abs(0.0,-0.01,-5, 0.1)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+                move_abs(0.0,-0.051,-5, 0.051)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
             elif pose[1] < -0.02:
                 print ('drift correct   +')
-                move_abs(0.00, 0.01,5, 0.1) #GRADOS! WTF , 
+                move_abs(0.00, 0.051,5, 0.051) #GRADOS! WTF , 
             
             
             
             else:
                 print ('getting close')
-                move_abs(0.051,0,0,0.1)
+                move_abs(0.066,0,0,0.051)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
             #rospy.sleep(0.1)    
             
