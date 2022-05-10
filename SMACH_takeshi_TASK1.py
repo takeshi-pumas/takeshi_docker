@@ -973,8 +973,8 @@ class Grasp_floor(smach.State):
         #save_hand(1)
         #img_after = save_hand(1)                            ################################################### New !!!!!! #####################
         #grasp_state = grasp_detector(img_after,img_before)  ##### here image grasp detector
-        img = save_hand(self.tries)
-        succ= grasp_detector(img)   ##### here check grasp now
+        #img = save_hand(self.tries)
+        succ= primitive_grasp_detector()
         
         broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
         
@@ -1240,7 +1240,7 @@ class Grasp_table(smach.State):
             
             
                 print ('getting close')
-                move_abs(0.1,0,0,0.1)
+                move_abs(0.051,0,0,0.051)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
             #rospy.sleep(0.1)    
             
