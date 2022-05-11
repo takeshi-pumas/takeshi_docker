@@ -829,7 +829,7 @@ class Scan_floor(smach.State):### check next state's goal
         try:
             xyz_map_object, _ =  listener.lookupTransform('map',target_tf,rospy.Time(0))
             print('target_tf,most likely class',target_tf, target_tf_class)
-            if closest_centroid_height <= 0.001:return 'above'
+            if closest_centroid_height <= 0.01:return 'above'
             else:return 'succ'
         except:
             print ('no target tf ')
@@ -1057,7 +1057,7 @@ class Grasp_floor_from_above(smach.State):
         print( 'class',target_tf_class, 'dest', cat)
 
         print('Pose_from_above\n')
-        arm.set_joint_value_target(arm_grasp_from_above)
+        #arm.set_joint_value_target(arm_grasp_from_above)
         arm.go(arm_grasp_from_above)
         rospy.sleep(0.1)
 
@@ -1073,22 +1073,22 @@ class Grasp_floor_from_above(smach.State):
         print(pose)
 
 
-        while abs(pose[1]) >= 0.05:
+        while abs(pose[0]) >= 0.05:
 
             print ('pose',pose)
             pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
             if pose [1] >- 0.2 and pose[1]<0.02:
                 print ('getting close Y')
-                move_abs(0.031,0.02,0,0.1)
+                move_abs(0.031,0.00,0,0.051)
             if pose[1] >= 0.02:
                 print ('drift correct   -')
-                move_abs(0.0,0.0,-10, 0.10)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+                move_abs(0.0,-0.05,-10, 0.0510)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
             if pose[1] <= -0.02:
                 print ('drift correct   +')
-                move_abs(0.0, 0.0,10, 0.10) #GRADOS! WTF , 
+                move_abs(0.0, 0.05,10, 0.0510) #GRADOS! WTF , 
         rospy.sleep(0.1)
-
         print('Lined up over Y\n')
+
         rospy.sleep(0.1)
 
         publish_scene()
@@ -1128,21 +1128,37 @@ class Grasp_floor_from_above(smach.State):
         whole_body.go(wb)
         rospy.sleep(0.1)
 
-        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
-
-        if pose[0] >= 0.05:
-            print 'Correcting X'
-            wb = whole_body.get_current_joint_values()
-            wb[0] = wb[0] + pose[0]
-            whole_body.go(wb)
-            rospy.sleep(0.1)
-
-        pose, _ =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+        pose, quat =  listener.lookupTransform(target_tf, 'hand_palm_link',rospy.Time(0))
+        print (pose)
+        """ if pose[0] >= 0.05:
+                                 print 'Correcting X'
+                                 wb = whole_body.get_current_joint_values()
+                                 wb[0] = wb[0] + pose[0]
+                                 whole_body.go(wb)
+                                 rospy.sleep(0.1)
+                                             """
+        #pose, _ =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
 
         wb=whole_body.get_current_joint_values()
         wb[3] = wb[3] - 0.154
         whole_body.go(wb)
+        while abs(pose[1]) <= -0.05:
+
+            print ('pose',pose)
+            pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+            if pose [0] >- 0.2 and pose[0]<0.02:
+                print ('getting close Y')
+                move_abs(0.031,0.00,0,0.051)
+            if pose[0] >= 0.02:
+                print ('drift correct   -')
+                move_abs(0.0,-0.05,-10, 0.0510)   #GRADOS! WTF , DOCKER SEEMS TO WORK THAT WAY
+            if pose[0] <= -0.02:
+                print ('drift correct   +')
+                move_abs(0.0, 0.05,10, 0.0510) #GRADOS! WTF , 
         rospy.sleep(0.1)
+        
+
+
 
         img2 = save_hand(0)
         img2 = cv2.cvtColor(img2, cv2.COLOR_BGR2RGB)
@@ -1154,38 +1170,37 @@ class Grasp_floor_from_above(smach.State):
         print('Aligning Angle 2')
         print ang
 
+        pose, quat =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
+        #rospy.sleep(0.1)
+
+
         wb=whole_body.get_current_joint_values()
         wb[7] = wb[7] + 0.52
         whole_body.go(wb)
         rospy.sleep(0.1)
 
         close_gripper()
-        rospy.sleep(1)
+        rospy.sleep(0.1)
 
         arm.set_named_target('go')
         arm.go()
         head.set_named_target('neutral')
         head.go()
-        close_gripper()
-        rospy.sleep(0.1)
+        img2 = save_hand(0)
+        #close_gripper()
+        #rospy.sleep(0.1)
 
-
+        broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
         a = gripper.get_current_joint_values()
         if np.linalg.norm(a - np.asarray(grasped))  >  (np.linalg.norm(a - np.asarray(ungrasped))):
             print ('grasp seems to have failed')
+            
             return 'failed'
+
         else:
             print('super primitive grasp detector points towards succesfull ')
             return'succ'
-        
-        if succ:
-            return 'succ'
-        self.tries+=1
-        if self.tries==3:
-            self.tries=0 
-            return'tries'
-        else:
-            return 'failed'
+
 
 
 
