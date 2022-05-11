@@ -1555,6 +1555,12 @@ class Pre_deliver(smach.State):
         elif cat ==3 :
             wb=wb_place_contA
             print ("Deliver to ",'Container_A')
+	elif cat ==4 :
+	    wb=wb_place_drawer_high
+	    print ("Deliver to ", 'Drawer Top' )
+	elif cat ==5 :
+	    wb=wb_place_dB
+	    print ("Deliver to ", 'Drawer Bottom' ) 
         elif cat ==6 :
             wb=wb_place_Box1
             print ("Deliver to ",'Bin_A')
