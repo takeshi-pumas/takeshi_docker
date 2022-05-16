@@ -824,7 +824,7 @@ class Scan_shelf(smach.State):
         smach.State.__init__(self,outcomes=['succ','failed','tries'])
         self.tries=0
     def execute(self,userdata):
-        global closest_centroid_index 
+        global closest_centroid_index , message_read
 
         self.tries+=1
         rospy.loginfo('State : Scan Shelves ')
@@ -840,14 +840,14 @@ class Scan_shelf(smach.State):
         av[1]=-0.12
         arm.go(av)
         gaze_point(2.5,4.7,0.3)
-        print ('request message is',message_read, 'try num ',self.tries)
+        print ('request message is',message_read.split(' ')[0] , 'try num ',self.tries)
         
         cents, xyz, imgs= seg_square_imgs(reg_lx=30, reg_hx=500, lower=100,higher=6000,plt_images=True)
         if len(cents)==0:return'failed'
         
         #closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
         class_resp=classify_images(imgs)
-        requested_centroid_index= messg_class_name_idx( message_read ,class_resp )
+        requested_centroid_index= messg_class_name_idx( message_read.split(' ')[0] ,class_resp )
         print (requested_centroid_index,'#####################################################################')
         if requested_centroid_index ==False:
             if self.tries==5:
@@ -1478,8 +1478,12 @@ class Goto_person(smach.State):
         if self.tries==4:
             self.tries=0 
             return'tries'
+        
+        if message_read.split(' ')[-1]=='left': goal_y = 3.0
+        else: goal_y = 4
+
         goal_x = 0.8 
-        goal_y = 3.3
+        
         goal_yaw = 2*1.57
         goal_xyz=np.asarray((goal_x,goal_y,goal_yaw))
 
@@ -1886,8 +1890,8 @@ if __name__== '__main__':
     with sm:
         #State machine for grasping on Floor
         
-        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
         smach.StateMachine.add("INITIAL",       Initial(),      transitions = {'failed':'INITIAL',      'succ':'SCAN_FLOOR',    'tries':'SCAN_FLOOR'}) 
+        smach.StateMachine.add("SCAN_SHELF",       Scan_shelf(),      transitions = {'failed':'SCAN_SHELF',      'succ':'PRE_GRASP_SHELF',    'tries':'PRE_GRASP_SHELF'}) 
         smach.StateMachine.add("PRE_GRASP_SHELF",   Pre_grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GRASP_SHELF',    'tries':'END'}) 
         smach.StateMachine.add("GRASP_SHELF",   Grasp_shelf() ,      transitions = {'failed':'SCAN_SHELF',      'succ':'GOTO_PERSON',    'tries':'INITIAL'}) 
         smach.StateMachine.add("GOTO_PERSON",    Goto_person(),   transitions = {'failed':'GOTO_PERSON',   'succ':'GIVE_OBJECT',     'tries':'INITIAL'},remapping={'counter_in':'sm_counter','counter_out':'sm_counter'})
