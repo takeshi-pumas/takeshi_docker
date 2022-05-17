@@ -1097,7 +1097,7 @@ class Grasp_floor_from_above(smach.State):
 
         print 'Correcting X'
         wb = whole_body.get_current_joint_values()
-        wb[0] = wb[0] + pose[0]
+        wb[0] = wb[0] + pose[0] + 0.1
         whole_body.go(wb)
         rospy.sleep(0.1)
 
@@ -1130,18 +1130,12 @@ class Grasp_floor_from_above(smach.State):
 
         pose, quat =  listener.lookupTransform(target_tf, 'hand_palm_link',rospy.Time(0))
         print (pose)
-        """ if pose[0] >= 0.05:
-                                 print 'Correcting X'
-                                 wb = whole_body.get_current_joint_values()
-                                 wb[0] = wb[0] + pose[0]
-                                 whole_body.go(wb)
-                                 rospy.sleep(0.1)
-                                             """
-        #pose, _ =  listener.lookupTransform('hand_palm_link',target_tf,rospy.Time(0))
-
+        
         wb=whole_body.get_current_joint_values()
-        wb[3] = wb[3] - 0.154
+        wb[3] = wb[3] - 0.157
         whole_body.go(wb)
+        rospy.sleep(0.1)
+
         while abs(pose[1]) <= -0.05:
 
             print ('pose',pose)
@@ -1156,8 +1150,6 @@ class Grasp_floor_from_above(smach.State):
                 print ('drift correct   +')
                 move_abs(0.0, 0.05,10, 0.0510) #GRADOS! WTF , 
         rospy.sleep(0.1)
-        
-
 
 
         img2 = save_hand(0)
@@ -1186,16 +1178,26 @@ class Grasp_floor_from_above(smach.State):
         arm.go()
         head.set_named_target('neutral')
         head.go()
-        img2 = save_hand(0)
-        #close_gripper()
-        #rospy.sleep(0.1)
+        close_gripper()
+        rospy.sleep(0.1)
 
+        gd2 = save_hand(0)
+        gd2 = cv2.cvtColor(gd2, cv2.COLOR_BGR2RGB)
+        gd2 = gd2[50:400, 0:390]
+
+        hp_Grasp_Det = super_primitive_grasp_detector(gd2)
+        
         broadcaster.sendTransform(pose,quat,rospy.Time.now(),target_tf,'grasped'  )
         a = gripper.get_current_joint_values()
         if np.linalg.norm(a - np.asarray(grasped))  >  (np.linalg.norm(a - np.asarray(ungrasped))):
-            print ('grasp seems to have failed')
-            
-            return 'failed'
+            print ('Mechanichal Detector: grasp seems to have failed')
+            if (hp_Grasp_Det == True):
+                print ('Visual grasp detector points towards succesfull')
+                close_gripper()
+                rospy.sleep(0.1)
+                return 'succ'
+            else:
+                return 'failed'
 
         else:
             print('super primitive grasp detector points towards succesfull ')
@@ -1606,7 +1608,6 @@ class Pre_deliver(smach.State):
     # ///////////////////////////////////////////////////////////////////////////////////////////
         """if wb==wb_place_Box2:                                #<------------------------------
             succ=move_base(wb[1],wb[0], wb[2])
-
         else:
             #move_d_to(0.6,userdata.delivery_destination)
                 succ=move_base(wb[1],wb[0], -0.5*np.pi)
@@ -1889,6 +1890,3 @@ if __name__== '__main__':
       
 
     outcome = sm.execute()
-
-
-    
