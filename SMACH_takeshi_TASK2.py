@@ -55,9 +55,12 @@ def messg_class_name_idx(message_read,class_resp):
         print('requeste class is tf index ', np.where(class_resp==idx)[0]/3)
         return np.where(class_resp==idx)[0]/3
     if len(np.where(class_resp==idx)[0])>1: 
-        aux=np.where(class_resp==idx)[0]/3
-        print ('hypoteheses in various tfs, highest likelihood tf idx->',aux[np.argmin(np.where(class_resp==idx)[0]%3)])
-        return np.asarray(aux[np.argmin(np.where(class_resp==idx)[0]%3)])
+        new_class_resp=class_resp.reshape(len(class_resp)/3,3)
+        if len(np.where(new_class_resp[:,0]==idx)[0])==1: 
+            print('requested class is tf index ', np.where(new_class_resp==idx)[0]/3)
+        else: return 'failed'
+
+    
 def readmssg(message):
     global message_read
     message_read=message.data
@@ -843,7 +846,7 @@ class Scan_shelf(smach.State):
         gaze_point(2.5,4.7,0.3)
         print ('request message is',message_read.split(' ')[0] , 'try num ',self.tries)
         
-        cents, xyz, imgs= seg_square_imgs(reg_lx=30, reg_hx=500, lower=100,higher=6000,plt_images=True)
+        cents, xyz, imgs= seg_square_imgs(reg_lx=30, reg_hx=500, lower=500,higher=6000,plt_images=True)
         if len(cents)==0:return'failed'
         
         #closest_centroid_height,closest_centroid_index=static_tf_publish(cents)
