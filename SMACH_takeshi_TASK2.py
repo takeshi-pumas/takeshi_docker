@@ -43,6 +43,7 @@ class Proto_state(smach.State):###example of a state definition.
 def messg_class_name_idx(message_read,class_resp):
     txt=message_read.split('_')
     txt=''.join(txt)
+    print (type(class_resp))
     for i,name  in enumerate(class_names):
         if txt in name:
             print(name , i)
@@ -56,7 +57,7 @@ def messg_class_name_idx(message_read,class_resp):
     if len(np.where(class_resp==idx)[0])>1: 
         aux=np.where(class_resp==idx)[0]/3
         print ('hypoteheses in various tfs, highest likelihood tf idx->',aux[np.argmin(np.where(class_resp==idx)[0]%3)])
-        return aux[np.argmin(np.where(class_resp==idx)[0]%3)]
+        return np.asarray(aux[np.argmin(np.where(class_resp==idx)[0]%3)])
 def readmssg(message):
     global message_read
     message_read=message.data
